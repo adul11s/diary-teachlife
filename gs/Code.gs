@@ -30,7 +30,7 @@ const SESSION_SHEET = 'Session';
  * ID folder Google Drive tempat penyimpanan foto.
  * Cara dapat ID: buka folder di Drive → lihat URL → https://drive.google.com/drive/folders/ID_INI
  */
-const DRIVE_FOLDER_ID = 'MASUKKAN_FOLDER_ID_ANDA_DISINI';
+const DRIVE_FOLDER_ID = '1dtAznKqNK-f5DncLjvk18dnALkIGr_-G';
 
 const HEADERS = [
   'ID', 'Date', 'Photo1_URL', 'Photo2_URL', 'Photo3_URL',
@@ -219,29 +219,24 @@ function uploadPhoto(payload) {
     return { success: false, message: 'Data foto (Base64) tidak valid.' };
   }
 
-  // Ekstrak tipe MIME dan Base64
   const parts = data.split(';base64,');
   const mimeType = parts[0].replace('data:', '');
   const raw = parts[1];
-
-  if (!raw) {
-    return { success: false, message: 'Base64 payload kosong.' };
-  }
+  if (!raw) return { success: false, message: 'Base64 payload kosong.' };
 
   try {
-    const decoded = Utilities.base64Decode(raw);
-    const blob = Utilities.newBlob(decoded, mimeType, filename);
+    const bytes = Utilities.base64Decode(raw);
+    const blob = Utilities.newBlob(bytes, mimeType, filename);
 
-    // Simpan ke folder Drive
     const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
     const file = folder.createFile(blob);
 
-    // Set akses publik (Anyone with link can view)
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
-    // URL yang bisa di-render di <img>
     const fileId = file.getId();
-    const url = 'https://drive.google.com/uc?export=view&id=' + fileId;
+
+    // URL alternatif yang lebih stabil untuk <img> tag
+    const url = 'https://drive.google.com/uc?export=download&id=' + fileId + '&confirm=t';
 
     return { success: true, url, fileId, name: file.getName() };
   } catch (err) {
@@ -268,8 +263,8 @@ function deletePhoto(payload) {
 /** Ambil fileId dari URL Drive */
 function extractFileId(url) {
   if (!url) return null;
-  const match = url.match(/[?&]id=([^&]+)/);
-  return match ? match[1] : null;
+  const m = url.match(/[?&]id=([^&]+)/);
+  return m ? m[1] : null;
 }
 
 /** ====== CRUD DIARY ====== */

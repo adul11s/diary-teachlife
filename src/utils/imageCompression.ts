@@ -24,6 +24,16 @@ const DEFAULT_OPTIONS = {
   useWebWorker: true,
 };
 
+/** Map MIME type ke ekstensi file */
+function mimeToExt(mime: string): string {
+  const map: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+  };
+  return map[mime] || '.jpg';
+}
+
 export async function compressImageToBase64(
   file: File,
   options: Partial<typeof DEFAULT_OPTIONS> = {},
@@ -36,10 +46,11 @@ export async function compressImageToBase64(
   const compressedFile = await imageCompression(file, opts);
   const base64 = await blobToBase64(compressedFile);
 
+  const ext = mimeToExt(compressedFile.type) || '.jpg';
   return {
     base64,
     sizeBytes: compressedFile.size,
-    filename: file.name.replace(/\.[^.]+$/, '.jpg') || 'photo.jpg',
+    filename: file.name.replace(/\.[^.]+$/, ext) || 'photo' + ext,
   };
 }
 
