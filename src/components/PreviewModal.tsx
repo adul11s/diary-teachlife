@@ -26,8 +26,8 @@ function formatDate(d?: string) {
 }
 
 export function PreviewModal({ diary, onConfirm, onClose, loading }: Props) {
-  const photos = [diary.photo1Url, diary.photo2Url, diary.photo3Url].filter(Boolean) as string[];
-  if (!photos.length && !diary.caption) {
+  const photoIds = [diary.photo1Id, diary.photo2Id, diary.photo3Id].filter(Boolean) as string[];
+  if (!photoIds.length && !diary.caption) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
         <div className="max-h-[90vh] w-full max-w-md overflow-auto rounded-2xl bg-white p-6 text-center">
@@ -65,7 +65,7 @@ export function PreviewModal({ diary, onConfirm, onClose, loading }: Props) {
               </time>
             </div>
             <div className="px-4 py-4">
-              {photos.length > 0 && <PhotoGalleryPreview photos={photos} />}
+              {photoIds.length > 0 && <PhotoGalleryPreview photoIds={photoIds} />}
               {diary.caption && (
                 <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
                   {diary.caption}

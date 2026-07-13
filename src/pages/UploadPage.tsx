@@ -11,9 +11,9 @@ import { PreviewModal } from '../components/PreviewModal';
 const EMPTY: Diary = {
   id: '',
   date: new Date().toISOString().slice(0, 10),
-  photo1Url: undefined,
-  photo2Url: undefined,
-  photo3Url: undefined,
+  photo1Id: undefined,
+  photo2Id: undefined,
+  photo3Id: undefined,
   caption: '',
   status: 'Draft',
 };
@@ -44,7 +44,7 @@ export default function UploadPage() {
 
   // ---- Foto helpers ----
   const photos = (): (string | undefined)[] => [
-    form.photo1Url, form.photo2Url, form.photo3Url,
+    form.photo1Id, form.photo2Id, form.photo3Id,
   ];
 
   function totalPhotos(): number {
@@ -79,7 +79,7 @@ export default function UploadPage() {
         const result = await uploadPhotoToDrive(file);
         setForm((prev) => ({
           ...prev,
-          [`photo${slot}Url`]: result.url,
+          [`photo${slot}Id`]: result.fileId,
         } as Diary));
       } catch (err) {
         setError((err as Error).message);
@@ -90,13 +90,13 @@ export default function UploadPage() {
   }
 
   function removePhoto(idx: number) {
-    const urls = [form.photo1Url, form.photo2Url, form.photo3Url];
+    const urls = [form.photo1Id, form.photo2Id, form.photo3Id];
     urls.splice(idx, 1);
     setForm({
       ...form,
-      photo1Url: urls[0],
-      photo2Url: urls[1],
-      photo3Url: urls[2],
+      photo1Id: urls[0],
+      photo2Id: urls[1],
+      photo3Id: urls[2],
     });
   }
 
@@ -121,17 +121,17 @@ export default function UploadPage() {
       ? await updateDiary({
           id: form.id,
           date: form.date,
-          photo1Url: form.photo1Url,
-          photo2Url: form.photo2Url,
-          photo3Url: form.photo3Url,
+          photo1Id: form.photo1Id,
+          photo2Id: form.photo2Id,
+          photo3Id: form.photo3Id,
           caption: form.caption,
           status,
         })
       : await createDiary({
           date: form.date,
-          photo1Url: form.photo1Url,
-          photo2Url: form.photo2Url,
-          photo3Url: form.photo3Url,
+          photo1Id: form.photo1Id,
+          photo2Id: form.photo2Id,
+          photo3Id: form.photo3Id,
           caption: form.caption,
           status,
         });
@@ -198,7 +198,7 @@ export default function UploadPage() {
           </div>
 
           <PhotoGallery
-            photos={photos()}
+            photoIds={photos()}
             onRemove={removePhoto}
             className="mb-3"
           />

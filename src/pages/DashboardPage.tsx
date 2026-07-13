@@ -128,7 +128,7 @@ export default function DashboardPage() {
             <h3 className="mb-2 px-1 text-sm font-semibold uppercase tracking-wide text-slate-500">
               {formatDate(date)} {''}
               <span className="text-xs font-normal text-slate-400">
-                ({items.reduce((n, d) => n + [d.photo1Url, d.photo2Url, d.photo3Url].filter(Boolean).length, 0)} foto)
+                ({items.reduce((n, d) => n + [d.photo1Id, d.photo2Id, d.photo3Id].filter(Boolean).length, 0)} foto)
               </span>
             </h3>
             <div className="space-y-3">
@@ -162,7 +162,7 @@ export default function DashboardPage() {
                       </button>
                     </div>
                   </div>
-                  <PhotoGallery photos={[d.photo1Url, d.photo2Url, d.photo3Url]} />
+                  <PhotoGallery photoIds={[d.photo1Id, d.photo2Id, d.photo3Id]} />
                   {d.caption && (
                     <p className="mt-3 line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
                       {d.caption}

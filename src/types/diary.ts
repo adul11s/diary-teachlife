@@ -1,10 +1,9 @@
-/** Tipe data Diary yang dipakai di seluruh aplikasi */
 export interface Diary {
   id: string;
-  date: string; // YYYY-MM-DD
-  photo1Url?: string; // Google Drive URL
-  photo2Url?: string;
-  photo3Url?: string;
+  date: string;
+  photo1Id?: string;
+  photo2Id?: string;
+  photo3Id?: string;
   caption: string;
   status: 'Draft' | 'Published';
   createdAt?: string;
@@ -26,7 +25,6 @@ export interface LoginResponse {
 }
 
 export interface UploadPhotoResult {
-  url: string;
   fileId: string;
   name: string;
 }
