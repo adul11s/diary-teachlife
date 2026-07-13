@@ -18,9 +18,9 @@ export interface CompressResult {
 }
 
 const DEFAULT_OPTIONS = {
-  maxSizeMB: 1.5,
-  maxWidthOrHeight: 1024,
-  initialQuality: 0.75,
+  maxSizeMB: 3,
+  maxWidthOrHeight: 2048,
+  initialQuality: 0.9,
   useWebWorker: true,
 };
 
