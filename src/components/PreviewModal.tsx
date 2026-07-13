@@ -26,7 +26,7 @@ function formatDate(d?: string) {
 }
 
 export function PreviewModal({ diary, onConfirm, onClose, loading }: Props) {
-  const photos = [diary.photo1, diary.photo2, diary.photo3].filter(Boolean) as string[];
+  const photos = [diary.photo1Url, diary.photo2Url, diary.photo3Url].filter(Boolean) as string[];
   if (!photos.length && !diary.caption) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">

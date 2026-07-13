@@ -2,9 +2,9 @@
 export interface Diary {
   id: string;
   date: string; // YYYY-MM-DD
-  photo1?: string; // Base64 string (bisa juga data URI)
-  photo2?: string;
-  photo3?: string;
+  photo1Url?: string; // Google Drive URL
+  photo2Url?: string;
+  photo3Url?: string;
   caption: string;
   status: 'Draft' | 'Published';
   createdAt?: string;
@@ -16,6 +16,8 @@ export interface ApiResponse<T = unknown> {
   message?: string;
   data?: T;
   code?: number;
+  token?: string;
+  expiresAt?: string;
 }
 
 export interface LoginResponse {
@@ -23,6 +25,10 @@ export interface LoginResponse {
   expiresAt: string;
 }
 
-/** Ukuran file Base64 approx (bytes) */
-export const MAX_BASE64_PER_PHOTO = 48_000; // aman di bawah batas ~50.000 per sel
+export interface UploadPhotoResult {
+  url: string;
+  fileId: string;
+  name: string;
+}
+
 export const MAX_PHOTOS_PER_DAY = 3;

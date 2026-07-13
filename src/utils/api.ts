@@ -2,17 +2,24 @@
  * utils/api.ts
  * ------------------------------------------------------------
  * Client untuk Google Apps Script Web App.
- * Setiap request memakai POST dengan body JSON `{ action, ...payload }`
- * agar konsisten, kecuali `publicList` (bisa GET).
- *
- * VITE_API_URL = URL Web App Google Apps Script.
+ * Setiap request memakai POST dengan body JSON `{ action, ...payload }`.
  */
 
-import type { ApiResponse, Diary, LoginResponse } from '../types/diary';
+import type { ApiResponse, Diary } from '../types/diary';
 import { getToken } from './auth';
 
-const API_URL = import.meta.env.VITE_API_URL as string;
+export const API_URL = import.meta.env.VITE_API_URL as string;
 if (!API_URL) console.warn('[api] VITE_API_URL belum diset di .env');
+
+/**
+ * Helper: ambil token atau throw.
+ * Dipakai oleh upload.ts yang butuh token wajib.
+ */
+export async function withToken(): Promise<string> {
+  const token = getToken();
+  if (!token) throw new Error('Sesi habis. Silakan login ulang.');
+  return token;
+}
 
 async function call<T>(
   action: string,
@@ -25,6 +32,7 @@ async function call<T>(
     if (!token) return { success: false, message: 'Not logged in', code: 401 } as ApiResponse<T>;
     body.token = token;
   }
+
   let res: Response;
   try {
     res = await fetch(API_URL, {
@@ -54,6 +62,7 @@ async function call<T>(
       message: 'Server mengembalikan respons kosong. Pastikan Web App sudah dideploy ulang.',
     } as ApiResponse<T>;
   }
+
   try {
     return JSON.parse(text) as ApiResponse<T>;
   } catch {
@@ -71,7 +80,7 @@ export function fetchPublishedDiaries() {
 
 /** ====== Auth ====== */
 export function login(username: string, password: string) {
-  return call<LoginResponse>('login', { username, password });
+  return call('login', { username, password });
 }
 
 export function logout() {
@@ -88,9 +97,7 @@ export function fetchDiaryById(id: string) {
   return call<Diary>('getById', { id }, true);
 }
 
-export function createDiary(
-  data: Partial<Diary>,
-) {
+export function createDiary(data: Partial<Diary>) {
   return call<Diary>('create', { ...data }, true);
 }
 

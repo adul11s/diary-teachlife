@@ -76,7 +76,7 @@ export default function PublicPage() {
                 </div>
 
                 <div className="px-4 py-4">
-                  <PhotoGalleryPreview photos={[d.photo1, d.photo2, d.photo3]} />
+                  <PhotoGalleryPreview photos={[d.photo1Url, d.photo2Url, d.photo3Url]} />
                   {d.caption && (
                     <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
                       {d.caption}

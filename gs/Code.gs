@@ -1,17 +1,22 @@
 /**
- * Code.gs — Backend "Diary Pembelajaran"
+ * Code.gs — Backend "Diary Pembelajaran" (Google Drive integration)
  * ------------------------------------------------------------
  * Deploy sebagai Web App (Google Apps Script):
- *   1. Buka spreadsheet baru → Extensions → Apps Script
- *   2. Tempel seluruh isi file ini, lalu Save
- *   3. Buat sheet bernama "Diary" dan sheet "Session" (opsional, untuk token)
- *   4. Deploy → New deployment → Web app
+ *   1. Buat Google Spreadsheet baru
+ *   2. Buat folder di Google Drive untuk menyimpan foto
+ *   3. Extensions → Apps Script → tempel kode ini → Save
+ *   4. Jalankan fungsi setup() SEKALI dari editor
+ *   5. Deploy → New deployment → Web app
  *        - Execute as: Me
  *        - Who has access: Anyone
- *   5. Salin Web App URL → taruh di frontend (.env: VITE_API_URL)
+ *   6. Salin Web App URL → taruh di .env.local (VITE_API_URL)
  *
- * Skema sheet "Diary" (baris 1 = header):
- *   ID | Date | Photo1 | Photo2 | Photo3 | Caption | Status | CreatedAt | UpdatedAt
+ * Skema sheet "Diary":
+ *   ID | Date | Photo1_URL | Photo2_URL | Photo3_URL | Caption | Status | CreatedAt | UpdatedAt
+ *
+ * Catatan:
+ *   - Foto dikirim sebagai Base64 (data URI) → disimpan ke Google Drive
+ *   - File Drive di-set "Anyone with link can view" agar bisa di-render <img>
  * ------------------------------------------------------------
  */
 
@@ -19,47 +24,53 @@
 const ADMIN_USERNAME = 'guru';
 const ADMIN_PASSWORD = 'gantiPassword123'; // ganti sesuai kebutuhan
 const SHEET_NAME = 'Diary';
-const SESSION_SHEET = 'Session'; // menyimpan token aktif
+const SESSION_SHEET = 'Session';
 
-/** Header kolom (urutan WAJIB sesuai skema) */
+/**
+ * ID folder Google Drive tempat penyimpanan foto.
+ * Cara dapat ID: buka folder di Drive → lihat URL → https://drive.google.com/drive/folders/ID_INI
+ */
+const DRIVE_FOLDER_ID = 'MASUKKAN_FOLDER_ID_ANDA_DISINI';
+
 const HEADERS = [
-  'ID', 'Date', 'Photo1', 'Photo2', 'Photo3',
+  'ID', 'Date', 'Photo1_URL', 'Photo2_URL', 'Photo3_URL',
   'Caption', 'Status', 'CreatedAt', 'UpdatedAt',
 ];
 
-/** ====== SETUP (jalankan SEKALI dari editor) ======
- *  Pilih fungsi "setup" di dropdown editor → klik Run.
- *  Ini membuat sheet "Diary" dan "Session" beserta header-nya.
- *  Saat pertama kali run, Google akan meminta otorisasi — izinkan.
+/**
+ * ====== SETUP (jalankan SEKALI dari editor) ======
+ * Membuat sheet & folder jika belum ada.
  */
 function setup() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // Sheet "Diary"
   let diary = ss.getSheetByName(SHEET_NAME);
   if (!diary) diary = ss.insertSheet(SHEET_NAME);
   if (diary.getLastRow() === 0) diary.appendRow(HEADERS);
 
-  // Sheet "Session"
   let session = ss.getSheetByName(SESSION_SHEET);
   if (!session) session = ss.insertSheet(SESSION_SHEET);
   if (session.getLastRow() === 0) session.appendRow(['Token', 'CreatedAt', 'ExpiresAt']);
 
+  // Pastikan folder Drive ada
+  try {
+    DriveApp.getFolderById(DRIVE_FOLDER_ID);
+  } catch (e) {
+    SpreadsheetApp.getUi().alert(
+      'FOLDER_ID tidak valid. Buat folder dulu di Google Drive, lalu salin ID-nya ke DRIVE_FOLDER_ID.',
+    );
+    return;
+  }
+
   SpreadsheetApp.getUi().alert(
-    'Setup selesai. Sheet "Diary" & "Session" sudah dibuat dengan header.',
+    'Setup selesai! Sheet "Diary", "Session", dan folder Drive siap digunakan.',
   );
 }
 
-/** ====== ENTRY POINT (Web App) ====== */
-function doGet(e) {
-  return handleRequest(e, 'GET');
-}
+/** ====== ENTRY POINT ====== */
+function doGet(e) { return handleRequest(e, 'GET'); }
+function doPost(e) { return handleRequest(e, 'POST'); }
 
-function doPost(e) {
-  return handleRequest(e, 'POST');
-}
-
-/** Router sederhana berdasarkan parameter `action` */
 function handleRequest(e, method) {
   let payload = {};
   try {
@@ -76,12 +87,10 @@ function handleRequest(e, method) {
   let result;
 
   switch (action) {
-    // ---- Publik ----
     case 'publicList':
       result = getPublishedDiaries();
       break;
 
-    // ---- Auth ----
     case 'login':
       result = login(payload);
       break;
@@ -89,7 +98,13 @@ function handleRequest(e, method) {
       result = logout(payload);
       break;
 
-    // ---- Admin ----
+    case 'uploadPhoto':
+      result = requireAuth(payload, () => uploadPhoto(payload));
+      break;
+    case 'deletePhoto':
+      result = requireAuth(payload, () => deletePhoto(payload));
+      break;
+
     case 'adminList':
       result = requireAuth(payload, getAdminDiaries);
       break;
@@ -116,9 +131,10 @@ function handleRequest(e, method) {
   return jsonOut(result);
 }
 
-/** ====== RESPONSE HELPER ====== */
+/** ====== RESPONSE ====== */
 function jsonOut(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj))
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -143,7 +159,6 @@ function getSessionSheet() {
   return sheet;
 }
 
-/** Validasi token sesi admin */
 function requireAuth(payload, fn) {
   const token = payload.token;
   if (!token || !isValidToken(token)) {
@@ -179,12 +194,10 @@ function login(payload) {
   if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
     return { success: false, message: 'Username atau password salah' };
   }
-  // Buat token sederhana
   const token = Utilities.getUuid() + Utilities.getUuid().replace(/-/g, '');
   const now = new Date();
-  const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 jam
-  const sheet = getSessionSheet();
-  sheet.appendRow([token, now, expires]);
+  const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  getSessionSheet().appendRow([token, now, expires]);
   return { success: true, token, expiresAt: expires.toISOString() };
 }
 
@@ -193,14 +206,86 @@ function logout(payload) {
   return { success: true };
 }
 
+/** ====== PHOTO UPLOAD / DELETE (Google Drive) ====== */
+
+/**
+ * uploadPhoto: menerima Base64 → simpan ke Drive → return URL publik
+ * Payload: { filename, data: "data:image/jpeg;base64,..." }
+ */
+function uploadPhoto(payload) {
+  const { filename = 'photo.jpg', data } = payload;
+
+  if (!data || typeof data !== 'string' || data.indexOf(';base64,') === -1) {
+    return { success: false, message: 'Data foto (Base64) tidak valid.' };
+  }
+
+  // Ekstrak tipe MIME dan Base64
+  const parts = data.split(';base64,');
+  const mimeType = parts[0].replace('data:', '');
+  const raw = parts[1];
+
+  if (!raw) {
+    return { success: false, message: 'Base64 payload kosong.' };
+  }
+
+  try {
+    const decoded = Utilities.base64Decode(raw);
+    const blob = Utilities.newBlob(decoded, mimeType, filename);
+
+    // Simpan ke folder Drive
+    const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+    const file = folder.createFile(blob);
+
+    // Set akses publik (Anyone with link can view)
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    // URL yang bisa di-render di <img>
+    const fileId = file.getId();
+    const url = 'https://drive.google.com/uc?export=view&id=' + fileId;
+
+    return { success: true, url, fileId, name: file.getName() };
+  } catch (err) {
+    return { success: false, message: 'Gagal menyimpan foto ke Drive: ' + err.message };
+  }
+}
+
+/**
+ * deletePhoto: hapus file dari Drive (trash)
+ * Payload: { fileId }
+ */
+function deletePhoto(payload) {
+  const { fileId } = payload;
+  if (!fileId) return { success: false, message: 'fileId diperlukan.' };
+  try {
+    const file = DriveApp.getFileById(fileId);
+    file.setTrashed(true);
+    return { success: true };
+  } catch (err) {
+    return { success: false, message: 'Gagal menghapus foto: ' + err.message };
+  }
+}
+
+/** Ambil fileId dari URL Drive */
+function extractFileId(url) {
+  if (!url) return null;
+  const match = url.match(/[?&]id=([^&]+)/);
+  return match ? match[1] : null;
+}
+
 /** ====== CRUD DIARY ====== */
+
+/**
+ * Konversi baris sheet ke objek.
+ * Kolom: 0=ID, 1=Date, 2=Photo1_URL, 3=Photo2_URL, 4=Photo3_URL,
+ *        5=Caption, 6=Status, 7=CreatedAt, 8=UpdatedAt
+ */
 function rowToObj(row) {
   return {
     id: row[0],
     date: row[1],
-    photo1: row[2],
-    photo2: row[3],
-    photo3: row[4],
+    photo1Url: row[2],
+    photo2Url: row[3],
+    photo3Url: row[4],
     caption: row[5],
     status: row[6],
     createdAt: row[7] ? new Date(row[7]).toISOString() : null,
@@ -216,7 +301,6 @@ function getPublishedDiaries() {
     const obj = rowToObj(data[i]);
     if (obj.status === 'Published') result.push(obj);
   }
-  // Urutkan tanggal terbaru di atas
   result.sort((a, b) => new Date(b.date) - new Date(a.date));
   return { success: true, data: result };
 }
@@ -245,15 +329,20 @@ function getDiaryById(id) {
 
 function createDiary(payload) {
   const sheet = getSheet();
-  const { date, photo1 = '', photo2 = '', photo3 = '', caption = '', status = 'Draft' } = payload;
+  const {
+    date,
+    photo1Url = '',
+    photo2Url = '',
+    photo3Url = '',
+    caption = '',
+    status = 'Draft',
+  } = payload;
 
   if (!date) return { success: false, message: 'Tanggal wajib diisi' };
 
-  // Cek batas maksimal 3 foto per hari
+  // Validasi maksimal 3 foto per hari
   const existing = countPhotosByDate(sheet, date);
-  const incoming = [photo1, photo2, photo3].filter(Boolean).length;
-  // Catatan: batas 3 FOTO per hari = 1 diary berisi 3 foto, jadi batas di sini
-  // adalah jumlah foto baru + foto existing tidak boleh > 3.
+  const incoming = [photo1Url, photo2Url, photo3Url].filter(Boolean).length;
   if (existing + incoming > 3) {
     return {
       success: false,
@@ -263,21 +352,39 @@ function createDiary(payload) {
 
   const id = Utilities.getUuid();
   const now = new Date().toISOString();
-  sheet.appendRow([id, date, photo1, photo2, photo3, caption, status, now, now]);
-  return { success: true, data: { id, date, photo1, photo2, photo3, caption, status } };
+  sheet.appendRow([id, date, photo1Url, photo2Url, photo3Url, caption, status, now, now]);
+  return {
+    success: true,
+    data: { id, date, photo1Url, photo2Url, photo3Url, caption, status },
+  };
 }
 
 function updateDiary(payload) {
   const sheet = getSheet();
-  const { id, date, photo1, photo2, photo3, caption, status } = payload;
+  const { id, date, photo1Url, photo2Url, photo3Url, caption, status } = payload;
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
       const row = i + 1;
+
+      // Hapus foto lama dari Drive jika diganti dengan yang baru
+      if (photo1Url !== undefined) {
+        const oldFileId = extractFileId(data[i][2]);
+        if (oldFileId) try { DriveApp.getFileById(oldFileId).setTrashed(true); } catch (e) { /* skip */ }
+        sheet.getRange(row, 3).setValue(photo1Url);
+      }
+      if (photo2Url !== undefined) {
+        const oldFileId = extractFileId(data[i][3]);
+        if (oldFileId) try { DriveApp.getFileById(oldFileId).setTrashed(true); } catch (e) { /* skip */ }
+        sheet.getRange(row, 4).setValue(photo2Url);
+      }
+      if (photo3Url !== undefined) {
+        const oldFileId = extractFileId(data[i][4]);
+        if (oldFileId) try { DriveApp.getFileById(oldFileId).setTrashed(true); } catch (e) { /* skip */ }
+        sheet.getRange(row, 5).setValue(photo3Url);
+      }
+
       if (date !== undefined) sheet.getRange(row, 2).setValue(date);
-      if (photo1 !== undefined) sheet.getRange(row, 3).setValue(photo1);
-      if (photo2 !== undefined) sheet.getRange(row, 4).setValue(photo2);
-      if (photo3 !== undefined) sheet.getRange(row, 5).setValue(photo3);
       if (caption !== undefined) sheet.getRange(row, 6).setValue(caption);
       if (status !== undefined) sheet.getRange(row, 7).setValue(status);
       sheet.getRange(row, 9).setValue(new Date().toISOString());
@@ -309,6 +416,14 @@ function deleteDiary(id) {
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0]) === String(id)) {
+      // Hapus semua foto terkait dari Drive
+      for (let col = 3; col <= 5; col++) {
+        const url = data[i][col - 1];
+        const fileId = extractFileId(url);
+        if (fileId) {
+          try { DriveApp.getFileById(fileId).setTrashed(true); } catch (e) { /* skip */ }
+        }
+      }
       sheet.deleteRow(i + 1);
       return { success: true };
     }
@@ -316,7 +431,7 @@ function deleteDiary(id) {
   return { success: false, message: 'Diary tidak ditemukan' };
 }
 
-/** Hitung total foto pada tanggal tertentu (across all diary entries that date) */
+/** Hitung total foto non-kosong pada tanggal tertentu */
 function countPhotosByDate(sheet, date) {
   const data = sheet.getDataRange().getValues();
   let count = 0;

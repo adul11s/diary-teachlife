@@ -74,10 +74,6 @@ export default function LoginPage() {
           {loading && <Spinner />}
           Masuk
         </button>
-
-        <p className="mt-4 text-center text-xs text-slate-400">
-          Default: <code className="rounded bg-slate-100 px-1">guru</code> /{' '}
-        </p>
       </form>
     </div>
   );
