@@ -231,11 +231,11 @@ function uploadPhoto(payload) {
     const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
     const file = folder.createFile(blob);
 
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
     const fileId = file.getId();
 
-    // URL alternatif yang lebih stabil untuk <img> tag
+    // Set akses publik
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
     const url = 'https://drive.google.com/uc?export=download&id=' + fileId + '&confirm=t';
 
     return { success: true, url, fileId, name: file.getName() };
