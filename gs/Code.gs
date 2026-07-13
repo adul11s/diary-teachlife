@@ -233,36 +233,14 @@ function uploadPhoto(payload) {
 
     const fileId = file.getId();
 
-    // Set akses publik via Drive REST API
-    setFilePublic(fileId);
+    // Set akses publik (memerlukan scope drive penuh — pastikan appsscript.json sudah benar)
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
     const url = 'https://drive.google.com/uc?export=download&id=' + fileId + '&confirm=t';
 
     return { success: true, url, fileId, name: file.getName() };
   } catch (err) {
     return { success: false, message: 'Gagal menyimpan foto ke Drive: ' + err.message };
-  }
-}
-
-/** Set akses "Anyone with link can view" via Drive REST API */
-function setFilePublic(fileId) {
-  const token = ScriptApp.getOAuthToken();
-  const resp = UrlFetchApp.fetch(
-    'https://www.googleapis.com/drive/v3/files/' + fileId + '/permissions',
-    {
-      method: 'POST',
-      headers: {
-        Authorization: 'Bearer ' + token,
-        'Content-Type': 'application/json',
-      },
-      payload: JSON.stringify({ role: 'reader', type: 'anyone' }),
-      muteHttpExceptions: true,
-    },
-  );
-  if (resp.getResponseCode() !== 200) {
-    throw new Error(
-      'Gagal set akses publik. Code: ' + resp.getResponseCode() + ', Response: ' + resp.getContentText(),
-    );
   }
 }
 
