@@ -20,11 +20,45 @@
  */
 
 /** ====== KONFIGURASI ====== */
-const ADMIN_USERNAME = 'guru';
-const ADMIN_PASSWORD = 'gantiPassword123';
 const SHEET_NAME = 'Diary';
 const SESSION_SHEET = 'Session';
-const DRIVE_FOLDER_ID = '1dtAznKqNK-f5DncLjvk18dnALkIGr_-G';
+
+/**
+ * Kredensial admin TIDAK lagi disimpan di kode.
+ * Set di Apps Script: Project Settings → Script Properties:
+ *   ADMIN_USERNAME = <username>
+ *   ADMIN_PASSWORD = <password>
+ * Baca saat runtime via PropertiesService (lihat getAdminCredentials()).
+ */
+function getAdminCredentials() {
+  const props = PropertiesService.getScriptProperties();
+  const username = props.getProperty('ADMIN_USERNAME');
+  const password = props.getProperty('ADMIN_PASSWORD');
+  if (!username || !password) {
+    throw new Error(
+      'Konfigurasi belum selesai: ADMIN_USERNAME/ADMIN_PASSWORD belum diset di ' +
+      'Script Properties (Apps Script → Project Settings → Script Properties). ' +
+      'Lihat: docs/deploy.md'
+    );
+  }
+  return { username, password };
+}
+
+/** Folder Drive: set DRIVE_FOLDER_ID di Script Properties, atau fallback konstanta di bawah. */
+function getDriveFolderId() {
+  const props = PropertiesService.getScriptProperties();
+  return props.getProperty('DRIVE_FOLDER_ID') || '1dtAznKqNK-f5DncLjvk18dnALkIGr_-G';
+}
+
+/** Batas ukuran gambar yang diterima (base64 di-decode): 5 MB. */
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+
+/** Estimasi jumlah byte dari string base64 (tanpa decode penuh). */
+function base64ByteLength(raw) {
+  if (!raw) return 0;
+  const padding = (raw.endsWith('==') ? 2 : (raw.endsWith('=') ? 1 : 0));
+  return Math.floor(raw.length * 3 / 4) - padding;
+}
 
 const HEADERS = [
   'ID', 'Date', 'Photo1_ID', 'Photo2_ID', 'Photo3_ID',
@@ -40,7 +74,7 @@ function setup() {
   let session = ss.getSheetByName(SESSION_SHEET);
   if (!session) session = ss.insertSheet(SESSION_SHEET);
   if (session.getLastRow() === 0) session.appendRow(['Token', 'CreatedAt', 'ExpiresAt']);
-  try { DriveApp.getFolderById(DRIVE_FOLDER_ID); } catch (e) {
+  try { DriveApp.getFolderById(getDriveFolderId()); } catch (e) {
     SpreadsheetApp.getUi().alert('FOLDER_ID tidak valid.');
     return;
   }
@@ -129,7 +163,14 @@ function removeToken(token) {
 /** ====== AUTH ====== */
 function login(payload) {
   const { username, password } = payload;
-  if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD)
+  let creds;
+  try {
+    creds = getAdminCredentials();
+  } catch (e) {
+    // fail-fast: kredensial belum dikonfigurasi → loginkan jelas dengan error konfigurasi
+    return { success: false, message: 'Server belum dikonfigurasi: ' + e.message, code: 500 };
+  }
+  if (username !== creds.username || password !== creds.password)
     return { success: false, message: 'Username atau password salah' };
   const token = Utilities.getUuid() + Utilities.getUuid().replace(/-/g, '');
   const now = new Date();
@@ -153,10 +194,18 @@ function uploadPhoto(payload) {
   const mimeType = parts[0].replace('data:', '');
   const raw = parts[1];
   if (!raw) return { success: false, message: 'Base64 payload kosong.' };
+  if (base64ByteLength(raw) > MAX_IMAGE_SIZE_BYTES) {
+    return {
+      success: false,
+      message: 'Ukuran gambar melebihi batas maksimal ' +
+        (MAX_IMAGE_SIZE_BYTES / (1024 * 1024)) + ' MB.',
+      code: 413,
+    };
+  }
   try {
     const bytes = Utilities.base64Decode(raw);
     const blob = Utilities.newBlob(bytes, mimeType, filename);
-    const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+    const folder = DriveApp.getFolderById(getDriveFolderId());
     const file = folder.createFile(blob);
     const fileId = file.getId();
     // Tidak perlu setSharing — foto disajikan via servePhoto endpoint
